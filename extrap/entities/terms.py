@@ -12,6 +12,7 @@ from numbers import Real
 from typing import Tuple, List, Union, Mapping
 
 import numpy as np
+from scipy.special import gamma
 from marshmallow import fields, validate
 
 from extrap.entities.coordinate import Coordinate
@@ -90,6 +91,10 @@ class SimpleTerm(SingleParameterTerm):
             self.evaluate = self._evaluate_polynomial
         elif self._term_type == "logarithm":
             self.evaluate = self._evaluate_logarithm
+        elif self._term_type == "factorial":
+            self.evaluate = self._evaluate_factorial
+        elif self._term_type == "exponential":
+            self.evaluate = self._evaluate_exponential
 
     def reset_coefficients(self):
         pass
@@ -107,6 +112,23 @@ class SimpleTerm(SingleParameterTerm):
             elif format == FunctionFormats.LATEX:
                 return f"\\log2{{{parameter}}}^{{{self.exponent}}}"
             return f"log2({parameter})^({self.exponent})"
+        elif self._term_type == "factorial":
+            if format == FunctionFormats.PYTHON:
+                return f"factorial({parameter})**({self.exponent})"
+            elif format == FunctionFormats.LATEX:
+                if self.exponent == 1:
+                    return f"{{{parameter}}}!"
+                return f"({{{parameter}}}!)^{{{self.exponent}}}"
+            if self.exponent == 1:
+                return f"{parameter}!"
+            return f"({parameter}!)^({self.exponent})"
+        elif self._term_type == "exponential":
+            base = self.exponent
+            if format == FunctionFormats.PYTHON:
+                return f"{base}**{parameter}"
+            elif format == FunctionFormats.LATEX:
+                return f"{{{base}}}^{{{parameter}}}"
+            return f"{base}^{parameter}"
 
     def _evaluate_polynomial(self, parameter_value):
         return parameter_value ** self._float_exponent
@@ -115,6 +137,13 @@ class SimpleTerm(SingleParameterTerm):
         log = np.log2(parameter_value)
         log **= self._float_exponent
         return log
+
+    def _evaluate_factorial(self, parameter_value):
+        factorial_value = gamma(parameter_value + 1)
+        return factorial_value ** self._float_exponent
+
+    def _evaluate_exponential(self, parameter_value):
+        return self._float_exponent ** parameter_value
 
     def evaluate(self, parameter_value):
         # is dispatched during object creation
@@ -174,6 +203,18 @@ class CompoundTerm(SingleParameterTerm):
             compound_term *= SimpleTerm("polynomial", f)
         if c != 0:
             compound_term *= SimpleTerm("logarithm", c)
+        return compound_term
+
+    @staticmethod
+    def create_factorial(exponent=1):
+        compound_term = CompoundTerm()
+        compound_term *= SimpleTerm("factorial", exponent)
+        return compound_term
+
+    @staticmethod
+    def create_exponential(base):
+        compound_term = CompoundTerm()
+        compound_term *= SimpleTerm("exponential", base)
         return compound_term
 
     def __eq__(self, other):

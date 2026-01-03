@@ -35,6 +35,10 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
 
     allow_log_terms = modeler_options.add(True, bool, 'Allows models with logarithmic terms',
                                           on_change=lambda self, v: self._exponents_changed())
+    allow_factorial_terms = modeler_options.add(False, bool, 'Allows models with factorial terms (n!)',
+                                                on_change=lambda self, v: self._exponents_changed())
+    allow_exponential_terms = modeler_options.add(False, bool, 'Allows models with exponential terms (2^n, e^n)',
+                                                  on_change=lambda self, v: self._exponents_changed())
     poly_exponents = modeler_options.add('', str, 'Set of polynomial exponents. Use comma separated list.',
                                          name='Polynomial', on_change=lambda self, v: self._exponents_changed())
     log_exponents = modeler_options.add('', str, 'Set of logarithmic exponents. Use comma separated list.',
@@ -53,6 +57,7 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
                                                    on_change=lambda self, v: self._exponents_changed())
     modeler_options.group('Exponents', poly_exponents, log_exponents, retain_default_exponents,
                           force_combination_exponents, allow_negative_exponents)
+    modeler_options.group('Advanced Terms', allow_factorial_terms, allow_exponential_terms)
 
     def __init__(self):
         """
@@ -65,7 +70,8 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
 
         # create the building blocks for the hypothesis
         self.hypotheses_building_blocks: List[CompoundTerm] = self.create_default_building_blocks(
-            self.allow_log_terms, self.allow_negative_exponents)
+            self.allow_log_terms, self.allow_negative_exponents,
+            self.allow_factorial_terms, self.allow_exponential_terms)
 
     def _exponents_changed(self):
         def parse_expos(expos):
@@ -86,10 +92,12 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
                                                                             self.force_combination_exponents)
             if self.retain_default_exponents:
                 self.hypotheses_building_blocks.extend(
-                    self.create_default_building_blocks(self.allow_log_terms, self.allow_negative_exponents))
+                    self.create_default_building_blocks(self.allow_log_terms, self.allow_negative_exponents,
+                                                        self.allow_factorial_terms, self.allow_exponential_terms))
         else:
-            self.hypotheses_building_blocks = self.create_default_building_blocks(self.allow_log_terms,
-                                                                                  self.allow_negative_exponents)
+            self.hypotheses_building_blocks = self.create_default_building_blocks(
+                self.allow_log_terms, self.allow_negative_exponents,
+                self.allow_factorial_terms, self.allow_exponential_terms)
 
     def get_matching_hypotheses(self, measurements: Sequence[Measurement]):
         """Removes log terms from the returned hypotheses_building_blocks, if those cannot describe the measurements."""
@@ -109,7 +117,8 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
                 ]
 
     @staticmethod
-    def create_default_building_blocks(allow_log_terms, allow_negative_exponents=False):
+    def create_default_building_blocks(allow_log_terms, allow_negative_exponents=False,
+                                        allow_factorial_terms=False, allow_exponential_terms=False):
         """
         Creates the default building blocks for the single parameter hypothesis
         that will be used during the search for the best hypothesis.
@@ -227,6 +236,16 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
                           (-3, 1, 0)]
 
         hypotheses_building_blocks = [CompoundTerm.create(*e) for e in exponents]
+
+        if allow_factorial_terms:
+            hypotheses_building_blocks.append(CompoundTerm.create_factorial(1))  # n!
+
+        if allow_exponential_terms:
+            import math
+            hypotheses_building_blocks.append(CompoundTerm.create_exponential(2))    # 2^n
+            hypotheses_building_blocks.append(CompoundTerm.create_exponential(math.e))  # e^n
+            hypotheses_building_blocks.append(CompoundTerm.create_exponential(10))   # 10^n
+
         # print the hypothesis building blocks, compound terms in debug mode
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             parameter = Parameter('p')
