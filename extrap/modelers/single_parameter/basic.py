@@ -98,20 +98,32 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
 
     def get_matching_hypotheses(self, measurements: Sequence[Measurement]):
         """Removes log terms from the returned hypotheses_building_blocks, if those cannot describe the measurements."""
+        hypotheses_building_blocks = self.hypotheses_building_blocks
 
         if self.are_measurements_log_capable(measurements, self.allow_negative_exponents):
-            return self.hypotheses_building_blocks
+            return self.filter_factorial_hypotheses(hypotheses_building_blocks, measurements)
 
-        if any(t.term_type == "logarithm" for compound_term in self.hypotheses_building_blocks
+        if any(t.term_type == "logarithm" for compound_term in hypotheses_building_blocks
                for t in compound_term.simple_terms):
             warnings.warn("Your measurements contained a point value below one, therefore, "
                           "Extra-P does not use logarithmic terms for modeling.")
 
-        return [compound_term
-                for compound_term in self.hypotheses_building_blocks
-                if not any(t.term_type == "logarithm"
-                           for t in compound_term.simple_terms)
-                ]
+        hypotheses_building_blocks = [
+            compound_term
+            for compound_term in hypotheses_building_blocks
+            if not any(t.term_type == "logarithm" for t in compound_term.simple_terms)
+        ]
+        return self.filter_factorial_hypotheses(hypotheses_building_blocks, measurements)
+
+    @staticmethod
+    def filter_factorial_hypotheses(hypotheses_building_blocks, measurements: Sequence[Measurement]):
+        if all(measurement.coordinate[0] <= 170 for measurement in measurements):
+            return hypotheses_building_blocks
+        return [
+            compound_term
+            for compound_term in hypotheses_building_blocks
+            if not any(t.term_type == "factorial" for t in compound_term.simple_terms)
+        ]
 
     @staticmethod
     def create_default_building_blocks(allow_log_terms, allow_negative_exponents=False, allow_factorial_terms=True):
