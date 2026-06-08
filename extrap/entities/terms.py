@@ -90,6 +90,8 @@ class SimpleTerm(SingleParameterTerm):
             self.evaluate = self._evaluate_polynomial
         elif self._term_type == "logarithm":
             self.evaluate = self._evaluate_logarithm
+        elif self._term_type == "factorial":
+            self.evaluate = self._evaluate_factorial
 
     def reset_coefficients(self):
         pass
@@ -107,6 +109,18 @@ class SimpleTerm(SingleParameterTerm):
             elif format == FunctionFormats.LATEX:
                 return f"\\log2{{{parameter}}}^{{{self.exponent}}}"
             return f"log2({parameter})^({self.exponent})"
+        elif self._term_type == "factorial":
+            if self.exponent == 1:
+                if format == FunctionFormats.PYTHON:
+                    return f"factorial({parameter})"
+                elif format == FunctionFormats.LATEX:
+                    return f"{{{parameter}}}!"
+                return f"{parameter}!"
+            if format == FunctionFormats.PYTHON:
+                return f"factorial({parameter})**({self.exponent})"
+            elif format == FunctionFormats.LATEX:
+                return f"({{{parameter}}}!)^{{{self.exponent}}}"
+            return f"({parameter}!)^({self.exponent})"
 
     def _evaluate_polynomial(self, parameter_value):
         return parameter_value ** self._float_exponent
@@ -115,6 +129,23 @@ class SimpleTerm(SingleParameterTerm):
         log = np.log2(parameter_value)
         log **= self._float_exponent
         return log
+
+    def _evaluate_factorial(self, parameter_value):
+        def lgamma_plus_one(value):
+            try:
+                return math.lgamma(value + 1)
+            except ValueError:
+                return math.nan
+
+        with np.errstate(over='ignore', invalid='ignore'):
+            if isinstance(parameter_value, np.ndarray):
+                lgamma_values = np.vectorize(lgamma_plus_one, otypes=[float])(parameter_value)
+                values = np.exp(lgamma_values)
+            else:
+                values = math.exp(lgamma_plus_one(parameter_value))
+            if self._float_exponent != 1:
+                values **= self._float_exponent
+            return values
 
     def evaluate(self, parameter_value):
         # is dispatched during object creation
@@ -321,7 +352,7 @@ class TermSchema(Schema):
 
 class SimpleTermSchema(TermSchema):
     coefficient = None
-    term_type = fields.String(validate=validate.OneOf(['polynomial', 'logarithm']))
+    term_type = fields.String(validate=validate.OneOf(['polynomial', 'logarithm', 'factorial']))
     exponent = NumberField()
 
     def create_object(self):

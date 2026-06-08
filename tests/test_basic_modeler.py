@@ -11,8 +11,9 @@ from extrap.entities.coordinate import Coordinate
 from extrap.entities.fraction import Fraction
 from extrap.entities.functions import SingleParameterFunction
 from extrap.entities.measurement import Measurement
-from extrap.entities.terms import CompoundTerm
+from extrap.entities.terms import CompoundTerm, SimpleTerm
 from extrap.modelers.single_parameter.basic import SingleParameterModeler
+from extrap.util.string_formats import FunctionFormats
 from tests.modelling_testcase import TestCaseWithFunctionAssertions
 
 
@@ -71,6 +72,27 @@ class TestBasicModeler(TestCaseWithFunctionAssertions):
         self.assertIn(CompoundTerm.create(2, 5), hbb)
         self.assertIn(CompoundTerm.create(4, 3), hbb)
         self.assertIn(CompoundTerm.create(4, 5), hbb)
+
+    def test_factorial_term(self):
+        term = SimpleTerm("factorial", 1)
+        values = term.evaluate(np.array([4, 5, 6]))
+
+        np.testing.assert_allclose(values, [24, 120, 720])
+        self.assertEqual("p!", term.to_string())
+        self.assertEqual("factorial(p)", term.to_string(format=FunctionFormats.PYTHON))
+
+    def test_modeling_factorial_tsp_shape(self):
+        points = [4, 8, 10, 11, 12]
+        values = [6.7684e-05, 0.0008524543333333334, 0.010295810333333334,
+                  0.08679736433333334, 0.9863515086666667]
+        measurements = [Measurement(Coordinate(p), None, None, v) for p, v in zip(points, values)]
+        modeler = SingleParameterModeler()
+
+        models = modeler.model([measurements])
+
+        self.assertEqual(1, len(models))
+        term = models[0].hypothesis.function.compound_terms[0].simple_terms[0]
+        self.assertEqual("factorial", term.term_type)
 
     def test_modeling(self):
         for exponents in [(0, 1, 1), (0, 1, 2), (1, 4, 0), (1, 3, 0), (1, 4, 1), (1, 3, 1), (1, 4, 2), (1, 3, 2),
