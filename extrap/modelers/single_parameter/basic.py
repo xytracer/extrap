@@ -11,6 +11,8 @@ import logging
 import warnings
 from typing import List, Sequence
 
+import numpy
+
 from extrap.entities.functions import SingleParameterFunction
 from extrap.entities.hypotheses import SingleParameterHypothesis
 from extrap.entities.measurement import Measurement, Measure
@@ -101,7 +103,7 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
         hypotheses_building_blocks = self.hypotheses_building_blocks
 
         if self.are_measurements_log_capable(measurements, self.allow_negative_exponents):
-            return self.filter_factorial_hypotheses(hypotheses_building_blocks, measurements)
+            return self.filter_nonfinite_hypotheses(hypotheses_building_blocks, measurements)
 
         if any(t.term_type == "logarithm" for compound_term in hypotheses_building_blocks
                for t in compound_term.simple_terms):
@@ -113,17 +115,22 @@ class SingleParameterModeler(AbstractSingleParameterModeler, SingularModeler):
             for compound_term in hypotheses_building_blocks
             if not any(t.term_type == "logarithm" for t in compound_term.simple_terms)
         ]
-        return self.filter_factorial_hypotheses(hypotheses_building_blocks, measurements)
+        return self.filter_nonfinite_hypotheses(hypotheses_building_blocks, measurements)
 
     @staticmethod
-    def filter_factorial_hypotheses(hypotheses_building_blocks, measurements: Sequence[Measurement]):
-        if all(measurement.coordinate[0] <= 170 for measurement in measurements):
-            return hypotheses_building_blocks
-        return [
-            compound_term
-            for compound_term in hypotheses_building_blocks
-            if not any(t.term_type == "factorial" for t in compound_term.simple_terms)
-        ]
+    def filter_nonfinite_hypotheses(hypotheses_building_blocks, measurements: Sequence[Measurement]):
+        if measurements[0].coordinate.dimensions > 1:
+            points = numpy.array([m.coordinate.as_tuple() for m in measurements]).T
+        else:
+            points = numpy.array([m.coordinate[0] for m in measurements])
+
+        finite_hypotheses = []
+        with numpy.errstate(over='ignore', invalid='ignore', divide='ignore'):
+            for compound_term in hypotheses_building_blocks:
+                values = compound_term.evaluate(points)
+                if numpy.all(numpy.isfinite(values)):
+                    finite_hypotheses.append(compound_term)
+        return finite_hypotheses
 
     @staticmethod
     def create_default_building_blocks(allow_log_terms, allow_negative_exponents=False, allow_factorial_terms=True):
